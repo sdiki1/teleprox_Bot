@@ -61,7 +61,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                     icon_custom_emoji_id=EMOJI_SHIELD,
                 ),
                 _button(
-                    text="Мои прокси",
+                    text="Статус прокси",
                     callback_data="menu:links",
                     style="success",
                     icon_custom_emoji_id=EMOJI_GEM,
@@ -72,7 +72,13 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                     text="Статус подписки",
                     callback_data="menu:status",
                     icon_custom_emoji_id=EMOJI_BOX,
-                )
+                ),
+                _button(
+                    text="Активировать",
+                    callback_data="menu:activate",
+                    style="success",
+                    icon_custom_emoji_id=EMOJI_GEM,
+                ),
             ],
         ]
     )

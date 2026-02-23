@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import logging
+import re
 from typing import Iterable
 from urllib.parse import unquote, urlencode, urlparse
 
@@ -40,6 +41,7 @@ MAX_ACTIVE_PROXIES_PER_USER = 5
 BLOCKED_TG_USER_ID = 1664076316
 BLOCKED_USER_TEXT = "ЛАВРЕНТ ИДИ НАХУЙ, СУКА!\n\nЗа 25₽ мне на карту ты помилован"
 DEFAULT_BAN_TEXT = "Доступ к боту ограничен администратором."
+EMOJI_KEY = "5330115548900501467"
 
 
 class AdminStates(StatesGroup):
@@ -87,11 +89,10 @@ def tg_emoji(emoji_id: str, fallback: str) -> str:
 
 def build_welcome_text() -> str:
     return (
-        f"{tg_emoji(EMOJI_SHIELD, '🛡')} <b>ProxyBot</b> выдает персональные SOCKS5-прокси,\n"
-        "привязанные к вашему Telegram-профилю.\n\n"
-        f"{tg_emoji(EMOJI_GEM, '💎')} Срок покупки: <b>30 дней × выбранные месяцы</b>.\n"
-        f"{tg_emoji(EMOJI_DEV, '📱')} Подключение в Telegram — в пару кликов.\n"
-        "Можно оформить подписку для себя или для друга."
+        f"{tg_emoji(EMOJI_SHIELD, '🛡')} <b>TeleProx</b> - сервис по покупке прокси для работы в Telegram.\n\n"
+        f"{tg_emoji(EMOJI_KEY, '🔑')} Подключение в Telegram — в пару кликов.\n\n"
+        "<blockquote>Сервис выдает персональные SOCKS5-прокси, привязанные к вашему Telegram-профилю "
+        "или к профилю друга.</blockquote>"
     )
 
 
@@ -101,7 +102,7 @@ def build_help_text() -> str:
         "/start — главное меню\n"
         "/plans — покупка: месяцы -> устройства\n"
         "/buy — покупка: месяцы -> устройства\n"
-        "/my_links — мои прокси\n"
+        "/my_links — статус прокси\n"
         "/status — подписка\n"
         "/help — помощь"
     )
@@ -137,14 +138,14 @@ def month_word(count: int) -> str:
 
 def build_buy_months_text() -> str:
     return (
-        f"{tg_emoji(EMOJI_GEM, '💎')} <b>Покупка прокси</b>\n\n"
-        "Шаг 1/3: выберите срок подписки."
+        f"{tg_emoji(EMOJI_SHIELD, '🛡')} <b>Покупка прокси</b>\n\n"
+        "Шаг 1/3: Выберите срок действия прокси."
     )
 
 
 def build_devices_step_text(*, months_count: int) -> str:
     return (
-        f"{tg_emoji(EMOJI_DEV, '📱')} <b>Шаг 2/3</b>\n\n"
+        f"{tg_emoji(EMOJI_SHIELD, '🛡')} <b>Шаг 2/3</b>\n\n"
         f"Срок: <b>{months_count} {month_word(months_count)}</b>\n"
         "Теперь выберите количество устройств."
     )
@@ -219,10 +220,34 @@ def parse_int(raw: str) -> int | None:
         return None
 
 
+def normalize_username_candidate(raw: str) -> str | None:
+    value = raw.strip()
+    if not value:
+        return None
+
+    lowered = value.lower()
+    if lowered.startswith("https://t.me/"):
+        value = value[len("https://t.me/") :]
+    elif lowered.startswith("http://t.me/"):
+        value = value[len("http://t.me/") :]
+    elif lowered.startswith("t.me/"):
+        value = value[len("t.me/") :]
+
+    if value.startswith("@"):
+        value = value[1:]
+    value = value.strip()
+    if not value:
+        return None
+
+    if not re.fullmatch(r"[A-Za-z0-9_]{5,32}", value):
+        return None
+    return value
+
+
 def payment_target_label(*, buyer_tg_user_id: int, target_tg_user_id: int) -> str:
     if buyer_tg_user_id == target_tg_user_id:
-        return "себе"
-    return f"другу ({target_tg_user_id})"
+        return "Себе"
+    return "Другу"
 
 
 async def ensure_user(
@@ -580,8 +605,7 @@ def create_router(
     yk = yookassa_client or YooKassaClient(shop_id="", secret_key="", return_url="https://t.me")
 
     async def build_checkout_context_text() -> str:
-        plans = await db.get_plans()
-        return f"{build_plans_text(plans)}\n\n{build_buy_months_text()}"
+        return build_buy_months_text()
 
     async def build_payment_message(
         *,
@@ -593,7 +617,7 @@ def create_router(
         target_tg_user_id: int,
     ) -> str:
         return (
-            f"{tg_emoji(EMOJI_GEM, '💎')} <b>Платеж создан</b>\n\n"
+            f"{tg_emoji(EMOJI_SHIELD, '🛡')} <b>Платеж создан</b>\n\n"
             f"Срок: <b>{months_count} {month_word(months_count)}</b>\n"
             f"Устройств: <b>{plan.devices_count}</b>\n"
             f"Кому: <b>{payment_target_label(buyer_tg_user_id=buyer_tg_user_id, target_tg_user_id=target_tg_user_id)}</b>\n"
@@ -1389,6 +1413,49 @@ def create_router(
         )
         await callback.answer()
 
+    @router.callback_query(F.data == "menu:activate")
+    async def cb_activate(callback: CallbackQuery) -> None:
+        if await handle_blocked_callback(db, callback):
+            return
+        user_id = await ensure_user(
+            db,
+            callback.from_user,
+            bot=callback.bot,
+            admin_tg_ids=admin_ids,
+        )
+        links = await db.get_active_links_for_user(user_id)
+        if not links:
+            await edit_or_send(
+                callback,
+                text="У вас нет активных прокси для активации.",
+                reply_markup=main_menu_keyboard(),
+                parse_mode=None,
+            )
+            await callback.answer("Нет активных прокси")
+            return
+
+        first_link = str(links[0]["link"])
+        parsed = parse_socks5_url(first_link)
+        if parsed is None:
+            await edit_or_send(
+                callback,
+                text="Не удалось подготовить ссылку активации для первой прокси.",
+                reply_markup=main_menu_keyboard(),
+                parse_mode=None,
+            )
+            await callback.answer("Ошибка ссылки", show_alert=True)
+            return
+
+        host, port, username, password = parsed
+        tg_link = telegram_socks_link(host, port, username, password)
+        await edit_or_send(
+            callback,
+            text="Нажмите кнопку ниже, чтобы активировать первую прокси.",
+            reply_markup=activate_first_proxy_keyboard(tg_link),
+            parse_mode=None,
+        )
+        await callback.answer()
+
     @router.callback_query(F.data.startswith("buymonths:"))
     async def cb_buy_months(callback: CallbackQuery) -> None:
         if await handle_blocked_callback(db, callback):
@@ -1452,7 +1519,7 @@ def create_router(
         await edit_or_send(
             callback,
             text=(
-                f"{tg_emoji(EMOJI_BOX, '📦')} <b>Шаг 3/3</b>\n\n"
+                f"{tg_emoji(EMOJI_SHIELD, '🛡')} <b>Шаг 3/3</b>\n\n"
                 f"Срок: <b>{months_count} {month_word(months_count)}</b>\n"
                 f"Устройств: <b>{plan.devices_count}</b>\n"
                 f"Сумма: <b>{plan.price_rub * months_count}₽</b>\n\n"
@@ -1510,8 +1577,11 @@ def create_router(
             await edit_or_send(
                 callback,
                 text=(
-                    "Отправьте <b>tg_user_id</b> друга, для которого оформить покупку.\n\n"
-                    "Пример: <code>123456789</code>"
+                    "Отправьте данные друга, для которого оформить покупку:\n"
+                    "• <b>tg_user_id</b>\n"
+                    "• <b>@username</b> (или ссылку t.me/username)\n"
+                    "• или <b>контакт</b> пользователя\n\n"
+                    "Пример: <code>123456789</code> или <code>@friend_username</code>"
                 ),
                 reply_markup=friend_target_input_keyboard(months_count=months_count, plan_code=plan.code),
                 parse_mode="HTML",
@@ -1576,15 +1646,41 @@ def create_router(
         if message.from_user is None:
             return
 
-        payload = extract_text_payload(message)
-        if payload is None:
-            await message.answer("Отправьте tg_user_id друга цифрами.")
-            return
+        target_tg_user_id: int | None = None
+        if message.contact is not None:
+            contact_user_id = int(message.contact.user_id) if message.contact.user_id is not None else None
+            if contact_user_id is None or contact_user_id <= 0:
+                await message.answer(
+                    "В этом контакте нет Telegram user_id.\n"
+                    "Отправьте tg_user_id или @username пользователя."
+                )
+                return
+            target_tg_user_id = contact_user_id
+        else:
+            payload = extract_text_payload(message)
+            if payload is None:
+                await message.answer("Отправьте tg_user_id, @username или контакт пользователя.")
+                return
 
-        target_tg_user_id = parse_int(payload)
-        if target_tg_user_id is None or target_tg_user_id <= 0:
-            await message.answer("tg_user_id должен быть положительным числом.")
-            return
+            parsed_id = parse_int(payload)
+            if parsed_id is not None and parsed_id > 0:
+                target_tg_user_id = parsed_id
+            else:
+                username_candidate = normalize_username_candidate(payload)
+                if username_candidate is None:
+                    await message.answer(
+                        "Не удалось распознать пользователя.\n"
+                        "Отправьте tg_user_id, @username (или t.me/username) либо контакт."
+                    )
+                    return
+                username_row = await db.get_user_by_username(username_candidate)
+                if username_row is None:
+                    await message.answer(
+                        "Пользователь с таким username не найден в базе бота.\n"
+                        "Попросите его сначала нажать /start, либо отправьте его tg_user_id."
+                    )
+                    return
+                target_tg_user_id = int(username_row["tg_user_id"])
 
         data = await state.get_data()
         months_count = parse_int(str(data.get("months_count", "")))
@@ -1847,7 +1943,7 @@ def create_router(
             delivery_text = (
                 f"Подарок активирован для пользователя <code>{recipient_profile.tg_user_id}</code>.\n"
                 "Не удалось отправить сообщение получателю. "
-                "Пусть пользователь запустит бота командой /start и нажмет «Мои прокси»."
+                "Пусть пользователь запустит бота командой /start и нажмет «Статус прокси»."
             )
         await edit_or_send(
             callback,

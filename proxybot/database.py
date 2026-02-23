@@ -304,6 +304,20 @@ class Database:
         await cursor.close()
         return dict(row) if row is not None else None
 
+    async def get_user_by_username(self, username: str) -> dict[str, Any] | None:
+        cursor = await self.conn.execute(
+            """
+            SELECT id, tg_user_id, username, first_name, last_name, created_at, updated_at
+            FROM users
+            WHERE username IS NOT NULL AND LOWER(username) = LOWER(?)
+            LIMIT 1
+            """,
+            (username,),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        return dict(row) if row is not None else None
+
     async def get_all_tg_user_ids(self) -> list[int]:
         cursor = await self.conn.execute(
             """

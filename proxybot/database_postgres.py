@@ -278,6 +278,20 @@ class PostgresDatabase:
             row = await cur.fetchone()
         return dict(row) if row is not None else None
 
+    async def get_user_by_username(self, username: str) -> dict[str, Any] | None:
+        async with self.conn.cursor() as cur:
+            await cur.execute(
+                """
+                SELECT id, tg_user_id, username, first_name, last_name, created_at, updated_at
+                FROM users
+                WHERE username IS NOT NULL AND LOWER(username) = LOWER(%s)
+                LIMIT 1
+                """,
+                (username,),
+            )
+            row = await cur.fetchone()
+        return dict(row) if row is not None else None
+
     async def get_all_tg_user_ids(self) -> list[int]:
         async with self.conn.cursor() as cur:
             await cur.execute(

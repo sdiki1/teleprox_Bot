@@ -107,16 +107,16 @@ class WebhookServer:
 
         buyer_tg_user_id = int(user_row["tg_user_id"])
         target_tg_user_id = int(payment.get("target_tg_user_id") or buyer_tg_user_id)
-        target_label = "себе" if target_tg_user_id == buyer_tg_user_id else f"другу ({target_tg_user_id})"
+        target_label = "Себе" if target_tg_user_id == buyer_tg_user_id else "Другу"
 
         try:
             await self.bot.send_message(
                 buyer_tg_user_id,
                 (
-                    "Платеж подтвержден в ЮKassa.\n"
+                    "🎉 Платеж подтвержден в ЮKassa.\n"
                     f"ID платежа: {payment['id']}\n"
                     f"Покупка: {target_label}\n\n"
-                    "Вернитесь в бот и нажмите «Активировать» для выдачи прокси."
+                    "Для выдачи прокси нажмите «Активировать»."
                 ),
                 parse_mode=None,
             )
