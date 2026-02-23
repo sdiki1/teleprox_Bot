@@ -69,6 +69,7 @@ docker compose up -d --build
 - `YOOKASSA_RETURN_URL` — URL возврата после оплаты (redirect)
 - `WEBHOOK_HOST` — bind host HTTP-сервера вебхуков
 - `WEBHOOK_PORT` — bind port HTTP-сервера вебхуков
+- `WEBHOOK_BIND_HOST` — host bind для публикации webhook-порта в `docker-compose`
 - `TELEGRAM_WEBHOOK_URL` — внешний base URL для Telegram webhook (если пусто, бот работает через polling)
 - `TELEGRAM_WEBHOOK_SECRET_TOKEN` — секретный токен для Telegram webhook
 - `SERVER_IP` — публичный IP сервера (используется в `docker-compose`)

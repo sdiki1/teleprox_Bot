@@ -24,10 +24,7 @@ async def setup_bot_commands(bot: Bot) -> None:
             BotCommand(command="start", description="Главное меню"),
             BotCommand(command="plans", description="Тарифы"),
             BotCommand(command="buy", description="Купить тариф"),
-            BotCommand(command="my_links", description="Мои прокси"),
-            BotCommand(command="status", description="Статус подписки"),
-            BotCommand(command="admin", description="Админ-панель"),
-            BotCommand(command="help", description="Помощь"),
+            BotCommand(command="my_links", description="Мои прокси")
         ]
     )
 
