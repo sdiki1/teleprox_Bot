@@ -12,7 +12,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, User as TelegramUser
+from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, ReplyKeyboardRemove, User as TelegramUser
 
 from .database import Database, Plan
 from .keyboards import (
@@ -26,6 +26,7 @@ from .keyboards import (
     back_to_menu_keyboard,
     devices_keyboard,
     friend_target_input_keyboard,
+    friend_user_picker_keyboard,
     main_menu_keyboard,
     months_keyboard,
     payment_keyboard,
@@ -1579,12 +1580,18 @@ def create_router(
                 text=(
                     "Отправьте данные друга, для которого оформить покупку:\n"
                     "• <b>tg_user_id</b>\n"
-                    "• <b>@username</b> (или ссылку t.me/username)\n"
+                    "• <b>@username</b>\n"
                     "• или <b>контакт</b> пользователя\n\n"
                     "Пример: <code>123456789</code> или <code>@friend_username</code>"
                 ),
                 reply_markup=friend_target_input_keyboard(months_count=months_count, plan_code=plan.code),
                 parse_mode="HTML",
+            )
+            await callback.bot.send_message(
+                callback.from_user.id,
+                "Нажмите кнопку ниже, чтобы выбрать пользователя как в Telegram.",
+                reply_markup=friend_user_picker_keyboard(),
+                parse_mode=None,
             )
             await callback.answer()
             return
@@ -1647,7 +1654,13 @@ def create_router(
             return
 
         target_tg_user_id: int | None = None
-        if message.contact is not None:
+        if message.user_shared is not None:
+            shared_user_id = int(message.user_shared.user_id)
+            if shared_user_id <= 0:
+                await message.answer("Не удалось получить user_id выбранного пользователя.")
+                return
+            target_tg_user_id = shared_user_id
+        elif message.contact is not None:
             contact_user_id = int(message.contact.user_id) if message.contact.user_id is not None else None
             if contact_user_id is None or contact_user_id <= 0:
                 await message.answer(
@@ -1661,6 +1674,11 @@ def create_router(
             if payload is None:
                 await message.answer("Отправьте tg_user_id, @username или контакт пользователя.")
                 return
+            if payload.strip().lower() in {"отмена", "отмена выбора", "cancel"}:
+                await state.clear()
+                await message.answer("Выбор пользователя отменен.", reply_markup=ReplyKeyboardRemove())
+                await message.answer(build_welcome_text(), reply_markup=main_menu_keyboard())
+                return
 
             parsed_id = parse_int(payload)
             if parsed_id is not None and parsed_id > 0:
@@ -1670,7 +1688,7 @@ def create_router(
                 if username_candidate is None:
                     await message.answer(
                         "Не удалось распознать пользователя.\n"
-                        "Отправьте tg_user_id, @username (или t.me/username) либо контакт."
+                        "Отправьте tg_user_id, @username либо контакт."
                     )
                     return
                 username_row = await db.get_user_by_username(username_candidate)
@@ -1689,6 +1707,10 @@ def create_router(
             await state.clear()
             await message.answer(
                 "Сессия покупки устарела. Начните заново через /buy.",
+                reply_markup=ReplyKeyboardRemove(),
+            )
+            await message.answer(
+                build_welcome_text(),
                 reply_markup=main_menu_keyboard(),
             )
             return
@@ -1702,7 +1724,10 @@ def create_router(
         plan = await db.get_plan(plan_code)
         if plan is None:
             await state.clear()
-            await message.answer("Тариф не найден. Начните заново через /buy.")
+            await message.answer(
+                "Тариф не найден. Начните заново через /buy.",
+                reply_markup=ReplyKeyboardRemove(),
+            )
             return
 
         recipient_profile = await ensure_recipient_profile(target_tg_user_id)
@@ -1726,11 +1751,13 @@ def create_router(
             logger.warning("Could not create YooKassa payment for friend: %s", exc)
             await message.answer(
                 f"Не удалось создать платеж в ЮKassa.\n{exc}",
-                reply_markup=main_menu_keyboard(),
+                reply_markup=ReplyKeyboardRemove(),
             )
+            await message.answer(build_welcome_text(), reply_markup=main_menu_keyboard())
             return
 
         await state.clear()
+        await message.answer("Пользователь выбран.", reply_markup=ReplyKeyboardRemove())
         await message.answer(
             await build_payment_message(
                 plan=plan,

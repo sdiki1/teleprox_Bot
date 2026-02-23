@@ -1,6 +1,12 @@
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    KeyboardButton,
+    KeyboardButtonRequestUser,
+    ReplyKeyboardMarkup,
+)
 
 from .database import Plan
 
@@ -210,6 +216,27 @@ def friend_target_input_keyboard(*, months_count: int, plan_code: str) -> Inline
                 )
             ],
         ]
+    )
+
+
+def friend_user_picker_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(
+                    text="Выбрать пользователя",
+                    request_user=KeyboardButtonRequestUser(
+                        request_id=1,
+                        user_is_bot=False,
+                    ),
+                )
+            ],
+            [KeyboardButton(text="Отмена выбора")],
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True,
+        selective=True,
+        input_field_placeholder="Нажмите «Выбрать пользователя»",
     )
 
 
