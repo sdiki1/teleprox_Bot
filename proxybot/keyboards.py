@@ -179,7 +179,7 @@ def purchase_target_keyboard(*, months_count: int, plan_code: str) -> InlineKeyb
                     style="success",
                 ),
                 _button(
-                    text="Для друга",
+                    text="Другу",
                     callback_data=f"buytarget:friend:{months_count}:{plan_code}",
                     style="primary",
                 ),
