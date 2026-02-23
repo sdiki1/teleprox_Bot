@@ -240,9 +240,10 @@ def friend_user_picker_keyboard() -> ReplyKeyboardMarkup:
     )
 
 
-def payment_keyboard(payment_id: int, *, confirmation_url: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
+def payment_keyboard(payment_id: int, *, confirmation_url: str | None) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    if confirmation_url:
+        rows.append(
             [
                 _button(
                     text="Оплатить через ЮKassa",
@@ -250,32 +251,48 @@ def payment_keyboard(payment_id: int, *, confirmation_url: str) -> InlineKeyboar
                     style="primary",
                     icon_custom_emoji_id=EMOJI_BOX,
                 )
-            ],
-            [
-                _button(
-                    text="Активировать",
-                    callback_data=f"pay:{payment_id}",
-                    style="success",
-                    icon_custom_emoji_id=EMOJI_GEM,
-                )
-            ],
-            [
-                _button(
-                    text="Отменить",
-                    callback_data=f"cancelpay:{payment_id}",
-                    style="danger",
-                    icon_custom_emoji_id=EMOJI_GLASSES,
-                )
-            ],
-            [
-                _button(
-                    text="Меню",
-                    callback_data="menu:home_clear",
-                    icon_custom_emoji_id=EMOJI_SHIELD,
-                )
-            ],
+            ]
+        )
+    rows.append(
+        [
+            _button(
+                text="Оплатить звездами ⭐️",
+                callback_data=f"paystars:{payment_id}",
+                style="primary",
+                icon_custom_emoji_id=EMOJI_GEM,
+            )
         ]
     )
+    rows.append(
+        [
+            _button(
+                text="Активировать",
+                callback_data=f"pay:{payment_id}",
+                style="success",
+                icon_custom_emoji_id=EMOJI_GEM,
+            )
+        ]
+    )
+    rows.append(
+        [
+            _button(
+                text="Отменить",
+                callback_data=f"cancelpay:{payment_id}",
+                style="danger",
+                icon_custom_emoji_id=EMOJI_GLASSES,
+            )
+        ]
+    )
+    rows.append(
+        [
+            _button(
+                text="Меню",
+                callback_data="menu:home_clear",
+                icon_custom_emoji_id=EMOJI_SHIELD,
+            )
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def activate_first_proxy_keyboard(first_proxy_link: str) -> InlineKeyboardMarkup:

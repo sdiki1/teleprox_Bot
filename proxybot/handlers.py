@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import logging
+import math
 import re
 from typing import Iterable
 from urllib.parse import unquote, urlencode, urlparse
@@ -12,7 +13,15 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message, ReplyKeyboardRemove, User as TelegramUser
+from aiogram.types import (
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    LabeledPrice,
+    Message,
+    PreCheckoutQuery,
+    ReplyKeyboardRemove,
+    User as TelegramUser,
+)
 
 from .database import Database, Plan
 from .keyboards import (
@@ -38,11 +47,11 @@ logger = logging.getLogger(__name__)
 
 PROXY_FOOTER = "Made with @proxy_sdiki1_bot"
 TEMP_KIND_PROXY_OUTPUT = "proxy_output"
-MAX_ACTIVE_PROXIES_PER_USER = 5
 BLOCKED_TG_USER_ID = 1664076316
 BLOCKED_USER_TEXT = "ЛАВРЕНТ ИДИ НАХУЙ, СУКА!\n\nЗа 25₽ мне на карту ты помилован"
 DEFAULT_BAN_TEXT = "Доступ к боту ограничен администратором."
 EMOJI_KEY = "5330115548900501467"
+STARS_PER_RUB = 2.5
 
 
 class AdminStates(StatesGroup):
@@ -135,6 +144,10 @@ def month_word(count: int) -> str:
     if count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
         return "месяца"
     return "месяцев"
+
+
+def rub_to_stars(amount_rub: int) -> int:
+    return int(math.ceil(max(0, amount_rub) * STARS_PER_RUB))
 
 
 def build_buy_months_text() -> str:
@@ -356,16 +369,6 @@ def build_proxy_block(*, proxy_index: int, user_proxy_label: str, proxy_id: int,
         f"Proxy ID: {proxy_id}\n\n"
         f"{tg_link}\n\n"
         f"{PROXY_FOOTER}"
-    )
-
-
-def build_proxy_limit_text(*, active_count: int, requested_count: int) -> str:
-    remaining = max(0, MAX_ACTIVE_PROXIES_PER_USER - active_count)
-    return (
-        f"Лимит на пользователя: не более {MAX_ACTIVE_PROXIES_PER_USER} прокси.\n"
-        f"Сейчас активно: {active_count}.\n"
-        f"Этот тариф добавляет: {requested_count}.\n"
-        f"Доступно для выдачи: {remaining}."
     )
 
 
@@ -616,16 +619,24 @@ def create_router(
         payment_id: int,
         buyer_tg_user_id: int,
         target_tg_user_id: int,
+        has_yookassa: bool,
     ) -> str:
+        stars_amount = rub_to_stars(amount_rub)
+        pay_step = "1) Нажмите «Оплатить звездами ⭐️»"
+        activate_step = "2) После оплаты прокси выдаются автоматически."
+        if has_yookassa:
+            pay_step = "1) Нажмите «Оплатить через ЮKassa» или «Оплатить звездами ⭐️»"
+            activate_step = "2) После оплаты нажмите «Активировать»."
         return (
             f"{tg_emoji(EMOJI_SHIELD, '🛡')} <b>Платеж создан</b>\n\n"
             f"Срок: <b>{months_count} {month_word(months_count)}</b>\n"
             f"Устройств: <b>{plan.devices_count}</b>\n"
             f"Кому: <b>{payment_target_label(buyer_tg_user_id=buyer_tg_user_id, target_tg_user_id=target_tg_user_id)}</b>\n"
             f"Сумма: <b>{amount_rub}₽</b>\n"
+            f"Звезды: <b>{stars_amount}⭐</b> (1₽ = 2.5⭐)\n"
             f"ID: <code>{payment_id}</code>\n\n"
-            "1) Нажмите «Оплатить через ЮKassa»\n"
-            "2) После оплаты нажмите «Активировать»"
+            f"{pay_step}\n"
+            f"{activate_step}"
         )
 
     async def ensure_recipient_profile(tg_user_id: int) -> UserProfile:
@@ -649,36 +660,39 @@ def create_router(
         recipient_tg_user_id: int,
         plan: Plan,
         months_count: int,
-    ) -> tuple[int, str]:
-        if not yk.enabled:
-            raise YooKassaError("ЮKassa не настроена. Заполните YOOKASSA_SHOP_ID и YOOKASSA_SECRET_KEY.")
-
+    ) -> tuple[int, str | None]:
         amount_rub = plan.price_rub * max(1, months_count)
-        description = (
-            f"ProxyBot: {plan.devices_count} устройств, "
-            f"{months_count} {month_word(months_count)}, "
-            f"{payment_target_label(buyer_tg_user_id=buyer_tg_user_id, target_tg_user_id=recipient_tg_user_id)}"
-        )
-        yk_payment = await yk.create_payment(
-            amount_rub=amount_rub,
-            description=description,
-            metadata={
-                "buyer_tg_user_id": str(buyer_tg_user_id),
-                "target_tg_user_id": str(recipient_tg_user_id),
-                "plan_code": plan.code,
-                "months_count": str(months_count),
-            },
-        )
+        yookassa_payment_id: str | None = None
+        yookassa_confirmation_url: str | None = None
+        if yk.enabled:
+            description = (
+                f"ProxyBot: {plan.devices_count} устройств, "
+                f"{months_count} {month_word(months_count)}, "
+                f"{payment_target_label(buyer_tg_user_id=buyer_tg_user_id, target_tg_user_id=recipient_tg_user_id)}"
+            )
+            yk_payment = await yk.create_payment(
+                amount_rub=amount_rub,
+                description=description,
+                metadata={
+                    "buyer_tg_user_id": str(buyer_tg_user_id),
+                    "target_tg_user_id": str(recipient_tg_user_id),
+                    "plan_code": plan.code,
+                    "months_count": str(months_count),
+                },
+            )
+            yookassa_payment_id = yk_payment.payment_id
+            yookassa_confirmation_url = yk_payment.confirmation_url
+
         payment_id = await db.create_payment(
             user_id=buyer_user_id,
             plan_code=plan.code,
             amount_rub=amount_rub,
             months_count=months_count,
             target_tg_user_id=recipient_tg_user_id,
-            yookassa_payment_id=yk_payment.payment_id,
-            yookassa_confirmation_url=yk_payment.confirmation_url,
+            yookassa_payment_id=yookassa_payment_id,
+            yookassa_confirmation_url=yookassa_confirmation_url,
         )
-        return payment_id, yk_payment.confirmation_url
+        return payment_id, yookassa_confirmation_url
 
     @router.message(CommandStart())
     async def cmd_start(message: Message) -> None:
@@ -1206,13 +1220,6 @@ def create_router(
             return
         profile = normalize_user_profile(user_row)
 
-        active_count = len(await db.get_active_links_for_user(profile.id))
-        if active_count + devices_count > MAX_ACTIVE_PROXIES_PER_USER:
-            await message.answer(
-                build_proxy_limit_text(active_count=active_count, requested_count=devices_count),
-            )
-            return
-
         plans = await db.get_plans()
         plan = next((item for item in plans if item.devices_count == devices_count), None)
         if plan is None:
@@ -1600,17 +1607,6 @@ def create_router(
             await callback.answer("Неизвестный вариант", show_alert=True)
             return
 
-        active_count = len(await db.get_active_links_for_user(buyer_user_id))
-        if active_count + plan.devices_count > MAX_ACTIVE_PROXIES_PER_USER:
-            await edit_or_send(
-                callback,
-                text=build_proxy_limit_text(active_count=active_count, requested_count=plan.devices_count),
-                reply_markup=main_menu_keyboard(),
-                parse_mode=None,
-            )
-            await callback.answer("Превышен лимит прокси")
-            return
-
         amount_rub = plan.price_rub * months_count
         try:
             payment_id, confirmation_url = await create_checkout_payment(
@@ -1640,6 +1636,7 @@ def create_router(
                 payment_id=payment_id,
                 buyer_tg_user_id=callback.from_user.id,
                 target_tg_user_id=callback.from_user.id,
+                has_yookassa=bool(confirmation_url),
             ),
             reply_markup=payment_keyboard(payment_id, confirmation_url=confirmation_url),
             parse_mode="HTML",
@@ -1731,12 +1728,6 @@ def create_router(
             return
 
         recipient_profile = await ensure_recipient_profile(target_tg_user_id)
-        active_count = len(await db.get_active_links_for_user(recipient_profile.id))
-        if active_count + plan.devices_count > MAX_ACTIVE_PROXIES_PER_USER:
-            await message.answer(
-                build_proxy_limit_text(active_count=active_count, requested_count=plan.devices_count),
-            )
-            return
 
         amount_rub = plan.price_rub * months_count
         try:
@@ -1766,10 +1757,236 @@ def create_router(
                 payment_id=payment_id,
                 buyer_tg_user_id=message.from_user.id,
                 target_tg_user_id=target_tg_user_id,
+                has_yookassa=bool(confirmation_url),
             ),
             reply_markup=payment_keyboard(payment_id, confirmation_url=confirmation_url),
             parse_mode="HTML",
         )
+
+    @router.callback_query(F.data.startswith("paystars:"))
+    async def cb_pay_stars(callback: CallbackQuery) -> None:
+        if await handle_blocked_callback(db, callback):
+            return
+        payment_id_raw = callback.data.split(":", maxsplit=1)[1]
+        if not payment_id_raw.isdigit():
+            await callback.answer("Некорректный платеж", show_alert=True)
+            return
+
+        payment_id = int(payment_id_raw)
+        user_id = await ensure_user(
+            db,
+            callback.from_user,
+            bot=callback.bot,
+            admin_tg_ids=admin_ids,
+        )
+        payment = await db.get_payment_for_user(payment_id=payment_id, user_id=user_id)
+        if payment is None:
+            await callback.answer("Платеж не найден", show_alert=True)
+            return
+        if payment["status"] != "pending":
+            await callback.answer("Платеж уже обработан", show_alert=True)
+            return
+
+        plan = await db.get_plan(payment["plan_code"])
+        if plan is None:
+            await callback.answer("Тариф не найден", show_alert=True)
+            return
+
+        recipient_tg_user_id = int(payment.get("target_tg_user_id") or callback.from_user.id)
+        recipient_profile = await ensure_recipient_profile(recipient_tg_user_id)
+
+        amount_rub = int(payment["amount_rub"])
+        months_count = max(1, int(payment.get("months_count") or 1))
+        stars_amount = rub_to_stars(amount_rub)
+        description = (
+            f"{plan.devices_count} устройств, {months_count} {month_word(months_count)}. "
+            f"Кому: {payment_target_label(buyer_tg_user_id=callback.from_user.id, target_tg_user_id=recipient_tg_user_id)}"
+        )
+        try:
+            await callback.bot.send_invoice(
+                chat_id=callback.from_user.id,
+                title="TeleProx - оплата звездами",
+                description=description,
+                payload=f"stars:{payment_id}",
+                provider_token="",
+                currency="XTR",
+                prices=[LabeledPrice(label="Подписка TeleProx", amount=stars_amount)],
+                start_parameter=f"teleprox-stars-{payment_id}",
+            )
+        except TelegramBadRequest as exc:
+            logger.warning("Could not send Stars invoice for payment %s: %s", payment_id, exc)
+            await callback.answer("Не удалось отправить счет в звездах", show_alert=True)
+            return
+
+        await callback.answer("Счет в звездах отправлен")
+
+    @router.pre_checkout_query()
+    async def pre_checkout(pre_checkout_query: PreCheckoutQuery) -> None:
+        blocked_text = await blocked_text_for_user(db, pre_checkout_query.from_user.id)
+        if blocked_text is not None:
+            await pre_checkout_query.answer(ok=False, error_message="Доступ к боту ограничен.")
+            return
+
+        payload = str(pre_checkout_query.invoice_payload or "")
+        if not payload.startswith("stars:"):
+            await pre_checkout_query.answer(ok=False, error_message="Некорректный тип платежа.")
+            return
+        payment_id_raw = payload.split(":", maxsplit=1)[1]
+        if not payment_id_raw.isdigit():
+            await pre_checkout_query.answer(ok=False, error_message="Некорректный платеж.")
+            return
+        if pre_checkout_query.currency != "XTR":
+            await pre_checkout_query.answer(ok=False, error_message="Поддерживается только оплата звездами.")
+            return
+
+        user_id = await ensure_user(
+            db,
+            pre_checkout_query.from_user,
+            bot=pre_checkout_query.bot,
+            admin_tg_ids=admin_ids,
+        )
+        payment = await db.get_payment_for_user(payment_id=int(payment_id_raw), user_id=user_id)
+        if payment is None or payment["status"] != "pending":
+            await pre_checkout_query.answer(ok=False, error_message="Платеж недоступен.")
+            return
+
+        expected_stars = rub_to_stars(int(payment["amount_rub"]))
+        if int(pre_checkout_query.total_amount) != expected_stars:
+            await pre_checkout_query.answer(ok=False, error_message="Некорректная сумма платежа.")
+            return
+
+        await pre_checkout_query.answer(ok=True)
+
+    @router.message(F.successful_payment)
+    async def successful_payment(message: Message) -> None:
+        if message.from_user is None or message.successful_payment is None:
+            return
+        payment_info = message.successful_payment
+        if payment_info.currency != "XTR":
+            return
+
+        payload = str(payment_info.invoice_payload or "")
+        if not payload.startswith("stars:"):
+            return
+        payment_id_raw = payload.split(":", maxsplit=1)[1]
+        if not payment_id_raw.isdigit():
+            await message.answer("Некорректный payload звездного платежа.")
+            return
+
+        payment_id = int(payment_id_raw)
+        user_id = await ensure_user(
+            db,
+            message.from_user,
+            bot=message.bot,
+            admin_tg_ids=admin_ids,
+        )
+        payment = await db.get_payment_for_user(payment_id=payment_id, user_id=user_id)
+        if payment is None:
+            await message.answer("Платеж не найден.")
+            return
+        if payment["status"] != "pending":
+            return
+
+        expected_stars = rub_to_stars(int(payment["amount_rub"]))
+        if int(payment_info.total_amount) != expected_stars:
+            logger.warning(
+                "Stars amount mismatch: payment_id=%s got=%s expected=%s",
+                payment_id,
+                payment_info.total_amount,
+                expected_stars,
+            )
+            await message.answer("Оплата получена с некорректной суммой. Обратитесь в поддержку.")
+            return
+
+        plan = await db.get_plan(payment["plan_code"])
+        if plan is None:
+            await message.answer("Тариф не найден.")
+            return
+
+        recipient_tg_user_id = int(payment.get("target_tg_user_id") or message.from_user.id)
+        recipient_profile = await ensure_recipient_profile(recipient_tg_user_id)
+
+        months_count = max(1, int(payment.get("months_count") or 1))
+        expires_at = int(
+            (datetime.now(tz=timezone.utc) + timedelta(days=plan.duration_days * months_count)).timestamp()
+        )
+        activated = await db.activate_payment_and_create_subscription_from_pool(
+            payment_id=payment_id,
+            payer_user_id=user_id,
+            recipient_user_id=recipient_profile.id,
+            plan_code=plan.code,
+            expires_at=expires_at,
+            devices_count=plan.devices_count,
+            proxy_public_host=proxy_public_host,
+        )
+        if activated is None:
+            free_count = await db.count_free_pool()
+            await message.answer(
+                (
+                    "Оплата получена, но сейчас недостаточно свободных прокси.\n"
+                    f"Свободно: {free_count}.\n"
+                    "Обратитесь в поддержку."
+                ),
+                reply_markup=main_menu_keyboard(),
+            )
+            return
+        subscription_id, created_proxies = activated
+
+        user_proxy_label = user_proxy_label_from_profile(recipient_profile)
+        proxies: list[dict[str, int | str | None]] = []
+        for index, proxy in enumerate(created_proxies, start=1):
+            tg_link = telegram_socks_link(
+                proxy_public_host,
+                int(proxy["port"]),
+                str(proxy["username"]),
+                str(proxy["password"]),
+            )
+            proxies.append(
+                {
+                    "index": index,
+                    "proxy_id": int(proxy["proxy_id"]),
+                    "tg_link": tg_link,
+                    "subscription_id": subscription_id,
+                    "device_number": int(proxy["device_number"]),
+                }
+            )
+
+        if recipient_profile.tg_user_id == message.from_user.id:
+            await send_proxy_sequence(
+                db=db,
+                bot=message.bot,
+                bot_chat_id=message.from_user.id,
+                user_id=user_id,
+                tg_user_id=message.from_user.id,
+                user_proxy_label=user_proxy_label,
+                proxies=proxies,
+                delivery_source="purchase",
+                source_message=None,
+                include_first_proxy_button=True,
+            )
+            await message.answer("Звездный платеж подтвержден, прокси выданы.")
+            return
+
+        delivery_text = (
+            f"Звездный платеж подтвержден.\n"
+            f"Подарок активирован для пользователя <code>{recipient_profile.tg_user_id}</code>."
+        )
+        try:
+            await send_proxy_sequence(
+                db=db,
+                bot=message.bot,
+                bot_chat_id=recipient_profile.tg_user_id,
+                user_id=recipient_profile.id,
+                tg_user_id=recipient_profile.tg_user_id,
+                user_proxy_label=user_proxy_label,
+                proxies=proxies,
+                delivery_source="purchase",
+                source_message=None,
+                include_first_proxy_button=True,
+            )
+        except (TelegramBadRequest, TelegramForbiddenError):
+            delivery_text += "\nНе удалось отправить прокси получателю (пусть запустит /start)."
+        await message.answer(delivery_text, reply_markup=main_menu_keyboard(), parse_mode="HTML")
 
     @router.callback_query(F.data.startswith("cancelpay:"))
     async def cb_cancel_payment(callback: CallbackQuery) -> None:
@@ -1795,6 +2012,12 @@ def create_router(
             return
 
         yookassa_payment_id = str(payment.get("yookassa_payment_id") or "").strip()
+        if not yookassa_payment_id:
+            await callback.answer(
+                "Для платежа звездами отмена недоступна. Просто не оплачивайте счет.",
+                show_alert=True,
+            )
+            return
         if yookassa_payment_id:
             try:
                 remote_status = await yk.get_payment_status(yookassa_payment_id)
@@ -1849,20 +2072,12 @@ def create_router(
         recipient_tg_user_id = int(payment.get("target_tg_user_id") or callback.from_user.id)
         recipient_profile = await ensure_recipient_profile(recipient_tg_user_id)
 
-        active_count = len(await db.get_active_links_for_user(recipient_profile.id))
-        if active_count + plan.devices_count > MAX_ACTIVE_PROXIES_PER_USER:
-            await edit_or_send(
-                callback,
-                text=build_proxy_limit_text(active_count=active_count, requested_count=plan.devices_count),
-                reply_markup=main_menu_keyboard(),
-                parse_mode=None,
-            )
-            await callback.answer("Превышен лимит прокси")
-            return
-
         yookassa_payment_id = str(payment.get("yookassa_payment_id") or "").strip()
         if not yookassa_payment_id:
-            await callback.answer("В платеже не найден ID ЮKassa", show_alert=True)
+            await callback.answer(
+                "Этот платеж не через ЮKassa. Оплатите звездами ⭐️ (кнопка выше), выдача пройдет автоматически.",
+                show_alert=True,
+            )
             return
 
         try:
