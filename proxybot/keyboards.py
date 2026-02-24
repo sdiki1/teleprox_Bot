@@ -347,7 +347,7 @@ def subscriptions_actions_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 _button(
-                    text="Статус подписки",
+                    text="Статус прокси",
                     callback_data="menu:status",
                     icon_custom_emoji_id=EMOJI_BOX,
                 )
