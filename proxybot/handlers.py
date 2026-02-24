@@ -1668,9 +1668,9 @@ def create_router(
             )
             await callback.bot.send_message(
                 callback.from_user.id,
-                f"{tg_emoji('5226501399914755198', '👁')} Нажмите кнопку ниже, чтобы выбрать пользователя в Telegram.",
+                f"{tg_emoji('5226501399914755198', '⬇️')} Нажмите кнопку ниже, чтобы выбрать пользователя в Telegram.",
                 reply_markup=friend_user_picker_keyboard(),
-                parse_mode=None,
+                parse_mode="HTML",
             )
             await callback.answer()
             return
