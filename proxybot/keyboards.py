@@ -66,13 +66,13 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                 _button(
                     text="Купить",
                     callback_data="menu:plans",
-                    style="primary",
+                    style="success",
                     icon_custom_emoji_id=EMOJI_SHIELD,
                 ),
                 _button(
                     text="Мои прокси",
                     callback_data="menu:links",
-                    style="success",
+                    style="primary",
                     icon_custom_emoji_id=EMOJI_GEM,
                 ),
             ],
