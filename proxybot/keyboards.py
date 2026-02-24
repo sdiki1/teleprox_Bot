@@ -230,7 +230,7 @@ def friend_user_picker_keyboard() -> ReplyKeyboardMarkup:
         resize_keyboard=True,
         one_time_keyboard=True,
         selective=True,
-        input_field_placeholder="Нажмите «Выбрать пользователя»",
+        input_field_placeholder="",
     )
 
 
