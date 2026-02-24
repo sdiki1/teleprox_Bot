@@ -225,8 +225,7 @@ def friend_user_picker_keyboard() -> ReplyKeyboardMarkup:
                         user_is_bot=False,
                     ),
                 )
-            ],
-            [KeyboardButton(text="Отмена выбора")],
+            ]
         ],
         resize_keyboard=True,
         one_time_keyboard=True,

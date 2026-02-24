@@ -337,6 +337,16 @@ async def handle_blocked_callback(db: Database, callback: CallbackQuery) -> bool
     return True
 
 
+async def hide_friend_picker_reply_keyboard_if_needed(*, state: FSMContext, bot, tg_user_id: int) -> None:
+    if await state.get_state() != PurchaseStates.waiting_friend_tg_id.state:
+        return
+    await bot.send_message(
+        tg_user_id,
+        "Выход из выбора пользователя.",
+        reply_markup=ReplyKeyboardRemove(),
+    )
+
+
 def profile_label(telegram_user: TelegramUser) -> str:
     if telegram_user.username:
         return f"{telegram_user.username}/{telegram_user.id}"
@@ -713,11 +723,17 @@ def create_router(
         return payment_id, yookassa_confirmation_url
 
     @router.message(CommandStart())
-    async def cmd_start(message: Message) -> None:
+    async def cmd_start(message: Message, state: FSMContext) -> None:
         if await handle_blocked_message(db, message):
             return
         if message.from_user is None:
             return
+        await hide_friend_picker_reply_keyboard_if_needed(
+            state=state,
+            bot=message.bot,
+            tg_user_id=message.from_user.id,
+        )
+        await state.clear()
         await ensure_user(
             db,
             message.from_user,
@@ -727,10 +743,16 @@ def create_router(
         await message.answer(build_welcome_text(), reply_markup=main_menu_keyboard())
 
     @router.message(Command("help"))
-    async def cmd_help(message: Message) -> None:
+    async def cmd_help(message: Message, state: FSMContext) -> None:
         if await handle_blocked_message(db, message):
             return
         if message.from_user is not None:
+            await hide_friend_picker_reply_keyboard_if_needed(
+                state=state,
+                bot=message.bot,
+                tg_user_id=message.from_user.id,
+            )
+            await state.clear()
             await ensure_user(
                 db,
                 message.from_user,
@@ -746,6 +768,11 @@ def create_router(
             return
         if message.from_user is None:
             return
+        await hide_friend_picker_reply_keyboard_if_needed(
+            state=state,
+            bot=message.bot,
+            tg_user_id=message.from_user.id,
+        )
         await state.clear()
         await ensure_user(
             db,
@@ -760,11 +787,17 @@ def create_router(
         )
 
     @router.message(Command("my_links"))
-    async def cmd_links(message: Message) -> None:
+    async def cmd_links(message: Message, state: FSMContext) -> None:
         if await handle_blocked_message(db, message):
             return
         if message.from_user is None:
             return
+        await hide_friend_picker_reply_keyboard_if_needed(
+            state=state,
+            bot=message.bot,
+            tg_user_id=message.from_user.id,
+        )
+        await state.clear()
         user_id = await ensure_user(
             db,
             message.from_user,
@@ -781,11 +814,17 @@ def create_router(
         )
 
     @router.message(Command("status"))
-    async def cmd_status(message: Message) -> None:
+    async def cmd_status(message: Message, state: FSMContext) -> None:
         if await handle_blocked_message(db, message):
             return
         if message.from_user is None:
             return
+        await hide_friend_picker_reply_keyboard_if_needed(
+            state=state,
+            bot=message.bot,
+            tg_user_id=message.from_user.id,
+        )
+        await state.clear()
         user_id = await ensure_user(
             db,
             message.from_user,
@@ -1357,6 +1396,11 @@ def create_router(
     async def cb_home_clear(callback: CallbackQuery, state: FSMContext) -> None:
         if await handle_blocked_callback(db, callback):
             return
+        await hide_friend_picker_reply_keyboard_if_needed(
+            state=state,
+            bot=callback.bot,
+            tg_user_id=callback.from_user.id,
+        )
         await state.clear()
         user_id = await ensure_user(
             db,
@@ -1381,6 +1425,11 @@ def create_router(
     async def cb_plans(callback: CallbackQuery, state: FSMContext) -> None:
         if await handle_blocked_callback(db, callback):
             return
+        await hide_friend_picker_reply_keyboard_if_needed(
+            state=state,
+            bot=callback.bot,
+            tg_user_id=callback.from_user.id,
+        )
         await state.clear()
         user_id = await ensure_user(
             db,
@@ -1584,6 +1633,11 @@ def create_router(
             return
 
         if action != "friend":
+            await hide_friend_picker_reply_keyboard_if_needed(
+                state=state,
+                bot=callback.bot,
+                tg_user_id=callback.from_user.id,
+            )
             await state.clear()
 
         if action == "back":
@@ -2128,7 +2182,7 @@ def create_router(
                     )
                 except TelegramBadRequest:
                     pass
-            await callback.answer("Платеж пока не завершен в ЮKassa", show_alert=True)
+            await callback.answer("Платеж пока не завершен", show_alert=True)
             return
 
         months_count = max(1, int(payment.get("months_count") or 1))
