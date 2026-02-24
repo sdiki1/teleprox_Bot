@@ -22,9 +22,11 @@ async def setup_bot_commands(bot: Bot) -> None:
     await bot.set_my_commands(
         [
             BotCommand(command="start", description="Главное меню"),
+            BotCommand(command="help", description="Помощь"),
             BotCommand(command="plans", description="Тарифы"),
             BotCommand(command="buy", description="Купить тариф"),
-            BotCommand(command="my_links", description="Мои прокси")
+            BotCommand(command="my_links", description="Мои прокси"),
+            BotCommand(command="status", description="Статус подписки"),
         ]
     )
 
