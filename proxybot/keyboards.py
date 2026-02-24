@@ -334,14 +334,15 @@ def subscriptions_actions_keyboard() -> InlineKeyboardMarkup:
                 _button(
                     text="Купить",
                     callback_data="menu:plans",
-                    style="primary",
+                    style="success",
                     icon_custom_emoji_id=EMOJI_SHIELD,
                 ),
                 _button(
-                    text="Статус прокси",
+                    text="Мои прокси",
                     callback_data="menu:links",
-                    style="success",
-                    icon_custom_emoji_id=EMOJI_GEM,
+                    
+                    style="primary",
+                    icon_custom_emoji_id=EMOJI_DOCS,
                 ),
             ],
             [
