@@ -32,6 +32,7 @@ from .keyboards import (
     admin_cancel_keyboard,
     admin_panel_keyboard,
     activate_first_proxy_keyboard,
+    activate_proxy_keyboard,
     back_to_menu_keyboard,
     devices_keyboard,
     friend_target_input_keyboard,
@@ -40,12 +41,13 @@ from .keyboards import (
     months_keyboard,
     payment_keyboard,
     purchase_target_keyboard,
+    subscriptions_actions_keyboard,
 )
 from .yookassa import YooKassaClient, YooKassaError
 
 logger = logging.getLogger(__name__)
 
-PROXY_FOOTER = "Made with @proxy_sdiki1_bot"
+PROXY_FOOTER = "Made with @TelePr0x_bot"
 TEMP_KIND_PROXY_OUTPUT = "proxy_output"
 BLOCKED_TG_USER_ID = 1664076316
 BLOCKED_USER_TEXT = "ЛАВРЕНТ ИДИ НАХУЙ, СУКА!\n\nЗа 25₽ мне на карту ты помилован"
@@ -112,7 +114,7 @@ def build_help_text() -> str:
         "/start — главное меню\n"
         "/plans — покупка: месяцы -> устройства\n"
         "/buy — покупка: месяцы -> устройства\n"
-        "/my_links — статус прокси\n"
+        "/my_links — Мои прокси\n"
         "/status — подписка\n"
         "/help — помощь"
     )
@@ -367,6 +369,7 @@ def build_proxy_block(*, proxy_index: int, user_proxy_label: str, proxy_id: int,
     return (
         f"PROXY-{proxy_index}-{user_proxy_label}\n"
         f"Proxy ID: {proxy_id}\n\n"
+        "✅ Нажмите на ссылку, чтобы подключить прокси.\n"
         f"{tg_link}\n\n"
         f"{PROXY_FOOTER}"
     )
@@ -448,9 +451,9 @@ async def send_links_list(
             "Выберите тариф через /buy или кнопку «Тарифы»."
         )
         if source_message is not None:
-            await source_message.edit_text(text, reply_markup=main_menu_keyboard())
+            await source_message.edit_text(text, reply_markup=back_to_menu_keyboard())
         else:
-            await bot.send_message(bot_chat_id, text, reply_markup=main_menu_keyboard())
+            await bot.send_message(bot_chat_id, text, reply_markup=back_to_menu_keyboard())
         return
 
     proxies: list[dict[str, int | str | None]] = []
@@ -509,7 +512,7 @@ async def send_proxy_sequence(
         await bot.send_message(
             bot_chat_id,
             "Не удалось подготовить ссылки для Telegram из сохраненных прокси.",
-            reply_markup=main_menu_keyboard(),
+            reply_markup=back_to_menu_keyboard(),
         )
         return
 
@@ -517,7 +520,7 @@ async def send_proxy_sequence(
         first_proxy_link = str(proxies[0]["tg_link"])
         first_proxy_msg = await bot.send_message(
             bot_chat_id,
-            "Быстрая активация первой прокси:",
+            "Быстрая активация прокси:",
             reply_markup=activate_first_proxy_keyboard(first_proxy_link),
         )
         await db.add_temp_message(
@@ -534,7 +537,12 @@ async def send_proxy_sequence(
             proxy_id=int(item["proxy_id"]),
             tg_link=str(item["tg_link"]),
         )
-        sent = await bot.send_message(bot_chat_id, text, parse_mode=None)
+        sent = await bot.send_message(
+            bot_chat_id,
+            text,
+            parse_mode=None,
+            reply_markup=activate_proxy_keyboard(str(item["tg_link"])),
+        )
         await db.add_temp_message(
             user_id=user_id,
             tg_user_id=tg_user_id,
@@ -578,12 +586,16 @@ async def send_status(
     if not subscriptions:
         text = f"{tg_emoji(EMOJI_BOX, '📦')} У вас нет активной подписки.\nОформите тариф через /buy."
         if edit_message is not None:
-            await edit_message.edit_text(text, reply_markup=main_menu_keyboard())
+            try:
+                await edit_message.edit_text(text, reply_markup=subscriptions_actions_keyboard())
+            except TelegramBadRequest as exc:
+                if "message is not modified" not in str(exc).lower():
+                    raise
         else:
-            await bot.send_message(bot_chat_id, text, reply_markup=main_menu_keyboard())
+            await bot.send_message(bot_chat_id, text, reply_markup=subscriptions_actions_keyboard())
         return
 
-    lines = [f"{tg_emoji(EMOJI_BOX, '📦')} <b>Активные подписки</b>", ""]
+    lines = [f"{tg_emoji(EMOJI_BOX, '📦')} <b>Активные прокси</b>", ""]
     for sub in subscriptions:
         expires_at = int(sub["expires_at"])
         lines.append(
@@ -593,9 +605,13 @@ async def send_status(
 
     text = "\n".join(lines)
     if edit_message is not None:
-        await edit_message.edit_text(text, reply_markup=main_menu_keyboard())
+        try:
+            await edit_message.edit_text(text, reply_markup=subscriptions_actions_keyboard())
+        except TelegramBadRequest as exc:
+            if "message is not modified" not in str(exc).lower():
+                raise
     else:
-        await bot.send_message(bot_chat_id, text, reply_markup=main_menu_keyboard())
+        await bot.send_message(bot_chat_id, text, reply_markup=subscriptions_actions_keyboard())
 
 
 def create_router(
@@ -622,10 +638,10 @@ def create_router(
         has_yookassa: bool,
     ) -> str:
         stars_amount = rub_to_stars(amount_rub)
-        pay_step = "1) Нажмите «Оплатить звездами ⭐️»"
+        pay_step = "1) Нажмите «⭐️ Оплатить звездами»"
         activate_step = "2) После оплаты прокси выдаются автоматически."
         if has_yookassa:
-            pay_step = "1) Нажмите «Оплатить через ЮKassa» или «Оплатить звездами ⭐️»"
+            pay_step = "1) Нажмите «Оплатить через ЮKassa» или «⭐️ Оплатить звездами»"
             activate_step = "2) После оплаты нажмите «Активировать»."
         return (
             f"{tg_emoji(EMOJI_SHIELD, '🛡')} <b>Платеж создан</b>\n\n"
@@ -2185,7 +2201,7 @@ def create_router(
             delivery_text = (
                 f"Подарок активирован для пользователя <code>{recipient_profile.tg_user_id}</code>.\n"
                 "Не удалось отправить сообщение получателю. "
-                "Пусть пользователь запустит бота командой /start и нажмет «Статус прокси»."
+                "Пусть пользователь запустит бота командой /start и нажмет «Мои прокси»."
             )
         await edit_or_send(
             callback,

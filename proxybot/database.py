@@ -103,7 +103,8 @@ class Database:
                 status TEXT NOT NULL CHECK(status IN ('active', 'expired')),
                 created_at INTEGER NOT NULL,
                 expires_at INTEGER NOT NULL,
-                notified_expired INTEGER NOT NULL DEFAULT 0
+                notified_expired INTEGER NOT NULL DEFAULT 0,
+                notified_expiring_2days INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS proxy_links (
@@ -177,6 +178,7 @@ class Database:
             """
         )
         await self.ensure_payments_columns()
+        await self.ensure_subscriptions_columns()
         await self.seed_plans()
         await self.conn.commit()
 
@@ -210,6 +212,21 @@ class Database:
             WHERE yookassa_payment_id IS NOT NULL
             """
         )
+
+    async def ensure_subscriptions_columns(self) -> None:
+        cursor = await self.conn.execute("PRAGMA table_info(subscriptions)")
+        rows = await cursor.fetchall()
+        await cursor.close()
+        existing = {str(row["name"]) for row in rows}
+
+        if "notified_expired" not in existing:
+            await self.conn.execute(
+                "ALTER TABLE subscriptions ADD COLUMN notified_expired INTEGER NOT NULL DEFAULT 0"
+            )
+        if "notified_expiring_2days" not in existing:
+            await self.conn.execute(
+                "ALTER TABLE subscriptions ADD COLUMN notified_expiring_2days INTEGER NOT NULL DEFAULT 0"
+            )
 
     async def seed_plans(self) -> None:
         for plan in DEFAULT_PLANS:
@@ -929,6 +946,39 @@ class Database:
         except Exception:
             await self.conn.rollback()
             raise
+
+    async def get_expiring_in_two_days_and_mark_notified_users(self) -> list[int]:
+        timestamp = now_ts()
+        threshold = timestamp + 2 * 24 * 60 * 60
+        cursor = await self.conn.execute(
+            """
+            SELECT s.id AS subscription_id, u.tg_user_id
+            FROM subscriptions s
+            JOIN users u ON u.id = s.user_id
+            WHERE s.status = 'active'
+              AND s.expires_at > ?
+              AND s.expires_at <= ?
+              AND s.notified_expiring_2days = 0
+            """,
+            (timestamp, threshold),
+        )
+        rows = await cursor.fetchall()
+        await cursor.close()
+        if not rows:
+            return []
+
+        subscription_ids = [int(row["subscription_id"]) for row in rows]
+        placeholders = ",".join("?" for _ in subscription_ids)
+        await self.conn.execute(
+            f"""
+            UPDATE subscriptions
+            SET notified_expiring_2days = 1
+            WHERE id IN ({placeholders})
+            """,
+            tuple(subscription_ids),
+        )
+        await self.conn.commit()
+        return list(dict.fromkeys(int(row["tg_user_id"]) for row in rows))
 
     async def expire_due_and_get_notified_users(self) -> list[int]:
         timestamp = now_ts()

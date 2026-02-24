@@ -16,7 +16,10 @@ EMOJI_GEM = "5330319637156479518"
 EMOJI_DEV = "5418063924933173277"
 EMOJI_BOX = "5298975240708187753"
 EMOJI_GLASSES = "5474385437403395055"
-
+EMOJI_STAR = "5463289097336405244"
+EMOJI_CARD = "5472250091332993630"
+EMOJI_DONE="5427009714745517609"
+EMOJI_CANCEL = "5465665476971471368"
 
 def _button(
     *,
@@ -67,7 +70,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                     icon_custom_emoji_id=EMOJI_SHIELD,
                 ),
                 _button(
-                    text="Статус прокси",
+                    text="Мои прокси",
                     callback_data="menu:links",
                     style="success",
                     icon_custom_emoji_id=EMOJI_GEM,
@@ -75,16 +78,10 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 _button(
-                    text="Статус подписки",
+                    text="Статус прокси",
                     callback_data="menu:status",
                     icon_custom_emoji_id=EMOJI_BOX,
-                ),
-                _button(
-                    text="Активировать",
-                    callback_data="menu:activate",
-                    style="success",
-                    icon_custom_emoji_id=EMOJI_GEM,
-                ),
+                )
             ],
         ]
     )
@@ -125,13 +122,8 @@ def devices_keyboard(plans: list[Plan], *, months_count: int) -> InlineKeyboardM
     for plan in plans:
         total_amount = plan.price_rub * months_count
         button_style = "primary"
-        button_icon = EMOJI_DEV
-        if plan.devices_count == 5:
-            button_style = "success"
-            button_icon = EMOJI_GEM
-        if plan.devices_count >= 15:
-            button_style = "primary"
-            button_icon = EMOJI_BOX
+        
+        button_icon = EMOJI_BOX
         rows.append(
             [
                 _button(
@@ -194,6 +186,7 @@ def purchase_target_keyboard(*, months_count: int, plan_code: str) -> InlineKeyb
                 _button(
                     text="Меню",
                     callback_data="menu:home_clear",
+                    icon_custom_emoji_id=EMOJI_SHIELD
                 )
             ],
         ]
@@ -213,6 +206,7 @@ def friend_target_input_keyboard(*, months_count: int, plan_code: str) -> Inline
                 _button(
                     text="Меню",
                     callback_data="menu:home_clear",
+                    icon_custom_emoji_id=EMOJI_SHIELD
                 )
             ],
         ]
@@ -249,17 +243,17 @@ def payment_keyboard(payment_id: int, *, confirmation_url: str | None) -> Inline
                     text="Оплатить через ЮKassa",
                     url=confirmation_url,
                     style="primary",
-                    icon_custom_emoji_id=EMOJI_BOX,
+                    icon_custom_emoji_id=EMOJI_CARD,
                 )
             ]
         )
     rows.append(
         [
             _button(
-                text="Оплатить звездами ⭐️",
+                text="Оплатить звездами",
                 callback_data=f"paystars:{payment_id}",
                 style="primary",
-                icon_custom_emoji_id=EMOJI_GEM,
+                icon_custom_emoji_id=EMOJI_STAR,
             )
         ]
     )
@@ -269,7 +263,7 @@ def payment_keyboard(payment_id: int, *, confirmation_url: str | None) -> Inline
                 text="Активировать",
                 callback_data=f"pay:{payment_id}",
                 style="success",
-                icon_custom_emoji_id=EMOJI_GEM,
+                icon_custom_emoji_id=EMOJI_DONE,
             )
         ]
     )
@@ -279,7 +273,7 @@ def payment_keyboard(payment_id: int, *, confirmation_url: str | None) -> Inline
                 text="Отменить",
                 callback_data=f"cancelpay:{payment_id}",
                 style="danger",
-                icon_custom_emoji_id=EMOJI_GLASSES,
+                icon_custom_emoji_id=EMOJI_CANCEL,
             )
         ]
     )
@@ -300,10 +294,10 @@ def activate_first_proxy_keyboard(first_proxy_link: str) -> InlineKeyboardMarkup
         inline_keyboard=[
             [
                 _button(
-                    text="Активировать первую прокси",
+                    text="Активировать",
                     url=first_proxy_link,
                     style="success",
-                    icon_custom_emoji_id=EMOJI_GEM,
+                    icon_custom_emoji_id=EMOJI_DONE,
                 )
             ],
             [
@@ -317,12 +311,63 @@ def activate_first_proxy_keyboard(first_proxy_link: str) -> InlineKeyboardMarkup
     )
 
 
+def activate_proxy_keyboard(proxy_link: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _button(
+                    text="Активировать",
+                    url=proxy_link,
+                    style="success",
+                    icon_custom_emoji_id=EMOJI_DONE,
+                )
+            ]
+        ]
+    )
+
+
+def subscriptions_actions_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                _button(
+                    text="Купить",
+                    callback_data="menu:plans",
+                    style="primary",
+                    icon_custom_emoji_id=EMOJI_SHIELD,
+                ),
+                _button(
+                    text="Статус прокси",
+                    callback_data="menu:links",
+                    style="success",
+                    icon_custom_emoji_id=EMOJI_GEM,
+                ),
+            ],
+            [
+                _button(
+                    text="Статус подписки",
+                    callback_data="menu:status",
+                    icon_custom_emoji_id=EMOJI_BOX,
+                )
+            ],
+            [
+                _button(
+                    text="📱 Меню",
+                    callback_data="menu:home_clear",
+                    style="primary",
+                    icon_custom_emoji_id=EMOJI_SHIELD,
+                )
+            ],
+        ]
+    )
+
+
 def back_to_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
                 _button(
-                    text="Вернуться в главное меню",
+                    text="📱 Меню",
                     callback_data="menu:home_clear",
                     style="primary",
                     icon_custom_emoji_id=EMOJI_SHIELD,

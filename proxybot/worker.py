@@ -15,14 +15,27 @@ logger = logging.getLogger(__name__)
 async def expiration_worker(bot: Bot, db: Database, check_interval: int) -> None:
     while True:
         try:
-            user_ids = await db.expire_due_and_get_notified_users()
-            for tg_user_id in user_ids:
+            expiring_user_ids = await db.get_expiring_in_two_days_and_mark_notified_users()
+            for tg_user_id in expiring_user_ids:
                 try:
                     await bot.send_message(
                         tg_user_id,
                         (
-                            "Срок действия вашей подписки истек.\n"
-                            "Прокси-ссылки деактивированы. Вы можете купить новый тариф через /buy."
+                            "🛡️ Ваш прокси заканчивается через два дня! "
+                            "Пожалуйста, не забудьте продлить его."
+                        ),
+                    )
+                except (TelegramBadRequest, TelegramForbiddenError):
+                    logger.warning("Could not send 2-day reminder to user %s", tg_user_id)
+
+            expired_user_ids = await db.expire_due_and_get_notified_users()
+            for tg_user_id in expired_user_ids:
+                try:
+                    await bot.send_message(
+                        tg_user_id,
+                        (
+                            "🛡 У Вас закончился прокси!\n"
+                            "Пожалуйста, оформите его снова."
                         ),
                     )
                 except (TelegramBadRequest, TelegramForbiddenError):
