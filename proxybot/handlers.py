@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from html import escape
 import logging
 import math
 import re
@@ -47,7 +48,7 @@ from .yookassa import YooKassaClient, YooKassaError
 
 logger = logging.getLogger(__name__)
 
-PROXY_FOOTER = "Made with @TelePr0x_bot"
+PROXY_FOOTER = "Сделано с помощью @TelePr0x_bot"
 TEMP_KIND_PROXY_OUTPUT = "proxy_output"
 BLOCKED_TG_USER_ID = 1664076316
 BLOCKED_USER_TEXT = "ЛАВРЕНТ ИДИ НАХУЙ, СУКА!\n\nЗа 25₽ мне на карту ты помилован"
@@ -366,11 +367,12 @@ def parse_socks5_url(link: str) -> tuple[str, int, str, str] | None:
 
 
 def build_proxy_block(*, proxy_index: int, user_proxy_label: str, proxy_id: int, tg_link: str) -> str:
+    safe_tg_link = escape(tg_link, quote=True)
     return (
         f"PROXY-{proxy_index}-{user_proxy_label}\n"
         f"Proxy ID: {proxy_id}\n\n"
-        "✅ Нажмите на ссылку, чтобы подключить прокси.\n"
-        f"{tg_link}\n\n"
+        f"{tg_emoji('5433653135799228968', '✅')} Нажмите на ссылку, чтобы подключить прокси.\n"
+        f"{safe_tg_link}\n\n"
         f"{PROXY_FOOTER}"
     )
 
@@ -540,7 +542,7 @@ async def send_proxy_sequence(
         sent = await bot.send_message(
             bot_chat_id,
             text,
-            parse_mode=None,
+            parse_mode="HTML",
             reply_markup=activate_proxy_keyboard(str(item["tg_link"])),
         )
         await db.add_temp_message(
@@ -1612,7 +1614,7 @@ def create_router(
             )
             await callback.bot.send_message(
                 callback.from_user.id,
-                "Нажмите кнопку ниже, чтобы выбрать пользователя как в Telegram.",
+                "Нажмите кнопку ниже, чтобы выбрать пользователя в Telegram.",
                 reply_markup=friend_user_picker_keyboard(),
                 parse_mode=None,
             )
