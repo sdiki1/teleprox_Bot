@@ -141,7 +141,7 @@ def devices_keyboard(plans: list[Plan], *, months_count: int) -> InlineKeyboardM
     rows.append(
         [
             _button(
-                text="Назад к месяцам",
+                text="Назад",
                 callback_data="menu:plans",
             )
         ]
