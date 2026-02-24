@@ -1838,40 +1838,54 @@ def create_router(
 
     @router.pre_checkout_query()
     async def pre_checkout(pre_checkout_query: PreCheckoutQuery) -> None:
-        blocked_text = await blocked_text_for_user(db, pre_checkout_query.from_user.id)
-        if blocked_text is not None:
-            await pre_checkout_query.answer(ok=False, error_message="Доступ к боту ограничен.")
-            return
+        try:
+            blocked_text = await blocked_text_for_user(db, pre_checkout_query.from_user.id)
+            if blocked_text is not None:
+                await pre_checkout_query.answer(ok=False, error_message="Доступ к боту ограничен.")
+                return
 
-        payload = str(pre_checkout_query.invoice_payload or "")
-        if not payload.startswith("stars:"):
-            await pre_checkout_query.answer(ok=False, error_message="Некорректный тип платежа.")
-            return
-        payment_id_raw = payload.split(":", maxsplit=1)[1]
-        if not payment_id_raw.isdigit():
-            await pre_checkout_query.answer(ok=False, error_message="Некорректный платеж.")
-            return
-        if pre_checkout_query.currency != "XTR":
-            await pre_checkout_query.answer(ok=False, error_message="Поддерживается только оплата звездами.")
-            return
+            payload = str(pre_checkout_query.invoice_payload or "")
+            if not payload.startswith("stars:"):
+                await pre_checkout_query.answer(ok=False, error_message="Некорректный тип платежа.")
+                return
+            payment_id_raw = payload.split(":", maxsplit=1)[1]
+            if not payment_id_raw.isdigit():
+                await pre_checkout_query.answer(ok=False, error_message="Некорректный платеж.")
+                return
+            if pre_checkout_query.currency != "XTR":
+                await pre_checkout_query.answer(ok=False, error_message="Поддерживается только оплата звездами.")
+                return
 
-        user_id = await ensure_user(
-            db,
-            pre_checkout_query.from_user,
-            bot=pre_checkout_query.bot,
-            admin_tg_ids=admin_ids,
-        )
-        payment = await db.get_payment_for_user(payment_id=int(payment_id_raw), user_id=user_id)
-        if payment is None or payment["status"] != "pending":
-            await pre_checkout_query.answer(ok=False, error_message="Платеж недоступен.")
-            return
+            user_id = await ensure_user(
+                db,
+                pre_checkout_query.from_user,
+                bot=pre_checkout_query.bot,
+                admin_tg_ids=admin_ids,
+            )
+            payment = await db.get_payment_for_user(payment_id=int(payment_id_raw), user_id=user_id)
+            if payment is None or payment["status"] != "pending":
+                await pre_checkout_query.answer(ok=False, error_message="Платеж недоступен.")
+                return
 
-        expected_stars = rub_to_stars(int(payment["amount_rub"]))
-        if int(pre_checkout_query.total_amount) != expected_stars:
-            await pre_checkout_query.answer(ok=False, error_message="Некорректная сумма платежа.")
-            return
+            expected_stars = rub_to_stars(int(payment["amount_rub"]))
+            if int(pre_checkout_query.total_amount) != expected_stars:
+                await pre_checkout_query.answer(ok=False, error_message="Некорректная сумма платежа.")
+                return
 
-        await pre_checkout_query.answer(ok=True)
+            await pre_checkout_query.answer(ok=True)
+        except Exception:
+            logger.exception(
+                "Pre-checkout handler failed: user_id=%s payload=%s",
+                pre_checkout_query.from_user.id,
+                pre_checkout_query.invoice_payload,
+            )
+            try:
+                await pre_checkout_query.answer(
+                    ok=False,
+                    error_message="Не удалось проверить платеж. Попробуйте еще раз.",
+                )
+            except TelegramBadRequest:
+                pass
 
     @router.message(F.successful_payment)
     async def successful_payment(message: Message) -> None:

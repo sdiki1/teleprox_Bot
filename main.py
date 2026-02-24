@@ -71,6 +71,7 @@ async def run() -> None:
             ),
         )
     )
+    allowed_updates = dispatcher.resolve_used_update_types()
     webhook_server = WebhookServer(
         db=db,
         bot=bot,
@@ -88,6 +89,7 @@ async def run() -> None:
             url=webhook_url,
             secret_token=settings.telegram_webhook_secret_token or None,
             drop_pending_updates=False,
+            allowed_updates=allowed_updates,
         )
         logging.info("Telegram webhook mode enabled: %s", webhook_url)
     else:
@@ -104,7 +106,7 @@ async def run() -> None:
         if telegram_webhook_url:
             await asyncio.Event().wait()
         else:
-            await dispatcher.start_polling(bot)
+            await dispatcher.start_polling(bot, allowed_updates=allowed_updates)
     finally:
         sync_task.cancel()
         worker_task.cancel()
