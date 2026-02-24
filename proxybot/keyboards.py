@@ -20,6 +20,7 @@ EMOJI_STAR = "5463289097336405244"
 EMOJI_CARD = "5472250091332993630"
 EMOJI_DONE="5427009714745517609"
 EMOJI_CANCEL = "5465665476971471368"
+EMOJI_DOCS = "5433653135799228968"
 
 def _button(
     *,
@@ -73,7 +74,7 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
                     text="Мои прокси",
                     callback_data="menu:links",
                     style="primary",
-                    icon_custom_emoji_id=EMOJI_GEM,
+                    icon_custom_emoji_id=EMOJI_DOCS,
                 ),
             ],
             [
