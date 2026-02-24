@@ -381,7 +381,7 @@ def build_proxy_block(*, proxy_index: int, user_proxy_label: str, proxy_id: int,
     return (
         f"PROXY-{proxy_index}-{user_proxy_label}\n"
         f"Proxy ID: {proxy_id}\n\n"
-        f"{tg_emoji('5433653135799228968', '✅')} Нажмите на ссылку, чтобы подключить прокси.\n"
+        f"{tg_emoji('5433653135799228968', '✅')} Нажмите на ссылку, чтобы подключить прокси:\n"
         f"{safe_tg_link}\n\n"
         f"{PROXY_FOOTER}"
     )
