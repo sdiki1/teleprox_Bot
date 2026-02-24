@@ -352,7 +352,7 @@ def subscriptions_actions_keyboard() -> InlineKeyboardMarkup:
             ],
             [
                 _button(
-                    text="📱 Меню",
+                    text="Меню",
                     callback_data="menu:home_clear",
                     style="primary",
                     icon_custom_emoji_id=EMOJI_SHIELD,
@@ -367,7 +367,7 @@ def back_to_menu_keyboard() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [
                 _button(
-                    text="📱 Меню",
+                    text="Меню",
                     callback_data="menu:home_clear",
                     style="primary",
                     icon_custom_emoji_id=EMOJI_SHIELD,
