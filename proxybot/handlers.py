@@ -1642,9 +1642,14 @@ def create_router(
 
         if action == "back":
             plans = await db.get_plans()
-            await edit_or_send(
-                callback,
-                text=build_devices_step_text(months_count=months_count),
+            if callback.message is not None:
+                try:
+                    await callback.message.delete()
+                except TelegramBadRequest:
+                    pass
+            await callback.bot.send_message(
+                callback.from_user.id,
+                build_devices_step_text(months_count=months_count),
                 reply_markup=devices_keyboard(plans, months_count=months_count),
                 parse_mode="HTML",
             )
